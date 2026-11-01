@@ -73,7 +73,7 @@ async function handleDownload({ quality, format }: { quality: string; format: st
     cookieFile,
     cookieBrowser,
     proxy: settingStore.proxy || null,
-    outputTemplate: "%(title).200s.%(ext)s",
+    outputTemplate: "%(fn_name,title).200s.%(ext)s",
     concurrentFragments: settingStore.concurrentFragments || null,
     noOverwrites: settingStore.noOverwrites,
     embedSubs: false,

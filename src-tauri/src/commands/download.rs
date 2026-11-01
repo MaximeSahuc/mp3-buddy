@@ -224,6 +224,33 @@ pub async fn start_download(
     Ok(())
 }
 
+/// `--parse-metadata` rules computing a custom `fn_name` field as "Artist - Title",
+/// evaluated per entry by yt-dlp (so it also works for playlists). Later rules override earlier ones:
+/// 1. `fn_artist` = artist, else creator, else uploader/channel, with " - Topic" / "VEVO" suffixes stripped
+/// 2. `fn_name` = "fn_artist - title" (or just the title when no artist is known)
+/// 3. title already contains a " - " separator (also en/em dash) -> keep the title as-is
+/// 4. title already contains the artist name (case-insensitive, whole word) -> keep the title as-is
+/// Rules that don't match leave the field untouched, so the output template falls back to `title`.
+fn build_music_filename_args() -> Vec<String> {
+    [
+        "--parse-metadata",
+        r"%(artist,creator,uploader,channel|)s:^(?P<fn_artist>.+)$",
+        "--replace-in-metadata",
+        "fn_artist",
+        r"\s+-\s+Topic$|VEVO$",
+        "",
+        "--parse-metadata",
+        r"%(fn_artist&{} - |)s%(title)s:^(?P<fn_name>.+)$",
+        "--parse-metadata",
+        r"title:^(?P<fn_name>.+\s[-–—]\s.+)$",
+        "--parse-metadata",
+        "%(fn_artist|)s\n%(title)s:(?i)^(?P<a>.+)\n(?P<fn_name>.*(?<!\\w)(?P=a)(?!\\w).*)$",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
 /// Build yt-dlp download arguments
 fn build_download_args(app: &AppHandle, params: &DownloadParams) -> Result<Vec<String>, String> {
     let mut args: Vec<String> = vec![
@@ -300,6 +327,9 @@ fn build_download_args(app: &AppHandle, params: &DownloadParams) -> Result<Vec<S
         .join(template)
         .to_string_lossy()
         .to_string();
+    if template.contains("%(fn_name") {
+        args.extend(build_music_filename_args());
+    }
     args.push("-o".to_string());
     args.push(output_template);
     args.push("--windows-filenames".to_string());
