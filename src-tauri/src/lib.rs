@@ -51,6 +51,9 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .setup(|_app| {
+            // Keep the app-managed yt-dlp up to date (startup + every 24h)
+            commands::spawn_ytdlp_auto_updater(_app.handle().clone());
+
             #[cfg(target_os = "linux")]
             if let Some(w) = _app.get_webview_window("main") {
                 let _ = w.set_decorations(false);

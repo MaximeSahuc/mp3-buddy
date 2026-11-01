@@ -139,6 +139,7 @@
     "ytdlpDownloadComplete": "yt-dlp 下載完成",
     "alreadyLatest": "已是最新版本",
     "updatedToLatest": "已更新至最新版本",
+    "ytdlpAutoUpdated": "yt-dlp 已自動更新（{version}）",
     "updateFailed": "更新失敗: {e}",
     "denoDownloadComplete": "Deno 下載完成",
     "checkAppUpdate": "檢查更新",

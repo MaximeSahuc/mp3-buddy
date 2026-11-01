@@ -142,6 +142,10 @@ onMounted(async () => {
   listen<string>("deep-link-url", (event) => {
     handleDeepLink(event.payload);
   });
+  // The Rust side auto-updates yt-dlp at startup and every 24h; let the user know when it happened
+  listen<string>("ytdlp-auto-updated", (event) => {
+    window.$message?.success(t("settings.ytdlpAutoUpdated", { version: event.payload }));
+  });
 });
 </script>
 

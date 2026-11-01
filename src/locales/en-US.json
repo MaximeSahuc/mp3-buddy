@@ -147,6 +147,7 @@
     "ytdlpDownloadComplete": "yt-dlp download complete",
     "alreadyLatest": "Already up to date",
     "updatedToLatest": "Updated to latest version",
+    "ytdlpAutoUpdated": "yt-dlp updated automatically ({version})",
     "updateFailed": "Update failed: {e}",
     "denoDownloadComplete": "Deno download complete",
     "checkAppUpdate": "Check for updates",

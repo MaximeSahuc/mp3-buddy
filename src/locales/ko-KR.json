@@ -139,6 +139,7 @@
     "ytdlpDownloadComplete": "yt-dlp 다운로드가 완료되었습니다",
     "alreadyLatest": "이미 최신 버전입니다",
     "updatedToLatest": "최신 버전으로 업데이트되었습니다",
+    "ytdlpAutoUpdated": "yt-dlp가 자동으로 업데이트되었습니다 ({version})",
     "updateFailed": "업데이트 실패: {e}",
     "denoDownloadComplete": "Deno 다운로드가 완료되었습니다",
     "checkAppUpdate": "업데이트 확인",

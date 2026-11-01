@@ -61,10 +61,12 @@ pub async fn get_ytdlp_status(app: AppHandle) -> Result<YtdlpStatus, String> {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("err_run_ytdlp:{}", e))?;
+    let output = {
+        let _guard = YTDLP_UPDATE_LOCK.read().await;
+        cmd.output()
+            .await
+            .map_err(|e| format!("err_run_ytdlp:{}", e))?
+    };
 
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
@@ -81,6 +83,9 @@ pub async fn get_ytdlp_status(app: AppHandle) -> Result<YtdlpStatus, String> {
 pub async fn download_ytdlp(app: AppHandle) -> Result<(), String> {
     let ytdlp_path = utils::get_managed_ytdlp_path(&app)?;
     let url = utils::get_ytdlp_download_url();
+
+    // Don't overwrite the binary while a self-update (or a spawn) is using it
+    let _guard = YTDLP_UPDATE_LOCK.write().await;
 
     let client = reqwest::Client::builder()
         .timeout(DOWNLOAD_TIMEOUT)
@@ -135,15 +140,37 @@ pub async fn download_ytdlp(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Serialises yt-dlp self-updates against yt-dlp invocations.
+///
+/// `yt-dlp -U` replaces its own binary; spawning yt-dlp while that happens can fail
+/// (half-written file, or the exe briefly missing on Windows). Every code path that
+/// spawns yt-dlp takes a read guard for the duration of the spawn, and the updater
+/// takes the write guard, so downloads simply wait for an in-flight update to finish.
+pub(crate) static YTDLP_UPDATE_LOCK: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+
+/// Upper bound for a self-update run, so a stalled network can't block downloads forever
+const UPDATE_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// How often the background task re-checks for a yt-dlp update while the app stays open
+const AUTO_UPDATE_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// Update yt-dlp to the latest version (always updates the app-managed copy, not the system-installed one)
 #[tauri::command]
 pub async fn update_ytdlp(app: AppHandle) -> Result<String, String> {
+    self_update_ytdlp(&app).await
+}
+
+/// Run `yt-dlp -U` on the app-managed copy while holding the update lock.
+/// Returns the combined stdout/stderr output on success.
+async fn self_update_ytdlp(app: &AppHandle) -> Result<String, String> {
     // System-installed yt-dlp is typically in a protected directory, so `-U` self-update fails due to permissions;
     // only the copy in the app data directory is updated here, consistent with download_ytdlp.
-    let ytdlp_path = utils::get_managed_ytdlp_path(&app)?;
+    let ytdlp_path = utils::get_managed_ytdlp_path(app)?;
     if !ytdlp_path.exists() {
         return Err("err_ytdlp_not_installed".to_string());
     }
+
+    let _guard = YTDLP_UPDATE_LOCK.write().await;
 
     let mut cmd = tokio::process::Command::new(&ytdlp_path);
     cmd.arg("-U")
@@ -152,7 +179,10 @@ pub async fn update_ytdlp(app: AppHandle) -> Result<String, String> {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
+    // Kill the updater if we give up on it (timeout drops the future holding `child`)
+    cmd.stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
 
     let mut child = cmd.spawn().map_err(|e| format!("err_start_update:{}", e))?;
 
@@ -185,19 +215,72 @@ pub async fn update_ytdlp(app: AppHandle) -> Result<String, String> {
         output
     });
 
+    let status = tokio::time::timeout(UPDATE_TIMEOUT, child.wait())
+        .await
+        .map_err(|_| "err_update_timeout".to_string())?
+        .map_err(|e| format!("err_process:{}", e))?;
+
     let stdout_out = stdout_handle.await.unwrap_or_default();
     let stderr_out = stderr_handle.await.unwrap_or_default();
-
-    let status = child
-        .wait()
-        .await
-        .map_err(|e| format!("err_process:{}", e))?;
 
     if status.success() {
         Ok(format!("{}\n{}", stdout_out, stderr_out).trim().to_string())
     } else {
         Err(format!("err_update_failed:{}", stderr_out.trim()))
     }
+}
+
+/// Read the version string of the app-managed yt-dlp (empty on failure)
+async fn managed_ytdlp_version(app: &AppHandle) -> String {
+    let Ok(path) = utils::get_managed_ytdlp_path(app) else {
+        return String::new();
+    };
+    let mut cmd = tokio::process::Command::new(&path);
+    cmd.arg("--version")
+        .env("PYTHONUTF8", "1")
+        .env("PYTHONIOENCODING", "utf-8");
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    let _guard = YTDLP_UPDATE_LOCK.read().await;
+    match cmd.output().await {
+        Ok(out) => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        Err(_) => String::new(),
+    }
+}
+
+/// One automatic update pass: silently does nothing if yt-dlp isn't installed yet,
+/// emits `ytdlp-auto-updated` (payload: new version) when a newer build was installed.
+async fn auto_update_once(app: &AppHandle) {
+    let installed = utils::get_managed_ytdlp_path(app)
+        .map(|p| p.exists())
+        .unwrap_or(false);
+    if !installed {
+        return;
+    }
+
+    let before = managed_ytdlp_version(app).await;
+    match self_update_ytdlp(app).await {
+        Ok(output) => {
+            let after = managed_ytdlp_version(app).await;
+            if output.contains("Updated yt-dlp") || (!after.is_empty() && after != before) {
+                eprintln!("[yt-dlp auto-update] {} -> {}", before, after);
+                let _ = app.emit("ytdlp-auto-updated", after);
+            }
+        }
+        Err(e) => eprintln!("[yt-dlp auto-update] failed: {}", e),
+    }
+}
+
+/// Background task started at app launch: update yt-dlp now, then once a day.
+/// yt-dlp builds older than ~90 days get flagged and frequently break on YouTube,
+/// so keeping the managed copy fresh avoids downloads failing out of the blue.
+pub fn spawn_ytdlp_auto_updater(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            auto_update_once(&app).await;
+            tokio::time::sleep(AUTO_UPDATE_INTERVAL).await;
+        }
+    });
 }
 
 // ========== yt-dlp plugin management ==========

@@ -139,6 +139,7 @@
     "ytdlpDownloadComplete": "Tải xuống yt-dlp hoàn tất",
     "alreadyLatest": "Bạn đang dùng phiên bản mới nhất",
     "updatedToLatest": "Đã cập nhật lên phiên bản mới nhất",
+    "ytdlpAutoUpdated": "yt-dlp đã được tự động cập nhật ({version})",
     "updateFailed": "Cập nhật thất bại: {e}",
     "denoDownloadComplete": "Tải xuống Deno hoàn tất",
     "checkAppUpdate": "Kiểm tra cập nhật ứng dụng",

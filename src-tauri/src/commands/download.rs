@@ -176,9 +176,12 @@ pub async fn start_download(
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
+    // Wait for any in-flight yt-dlp self-update before spawning
+    let update_guard = super::setup::YTDLP_UPDATE_LOCK.read().await;
     let mut child = cmd
         .spawn()
         .map_err(|e| format!("err_start_download:{}", e))?;
+    drop(update_guard);
 
     let pid = child.id().ok_or("err_get_pid")?;
     let task_id = params.id.clone();

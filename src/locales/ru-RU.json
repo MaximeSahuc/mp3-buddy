@@ -139,6 +139,7 @@
     "ytdlpDownloadComplete": "yt-dlp успешно загружен",
     "alreadyLatest": "Установлена последняя версия",
     "updatedToLatest": "Обновлено до последней версии",
+    "ytdlpAutoUpdated": "yt-dlp автоматически обновлён ({version})",
     "updateFailed": "Ошибка обновления: {e}",
     "denoDownloadComplete": "Deno успешно загружен",
     "checkAppUpdate": "Проверить обновления",

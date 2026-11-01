@@ -139,6 +139,7 @@
     "ytdlpDownloadComplete": "yt-dlpのダウンロードが完了しました",
     "alreadyLatest": "すでに最新バージョンです",
     "updatedToLatest": "最新バージョンに更新しました",
+    "ytdlpAutoUpdated": "yt-dlp を自動更新しました（{version}）",
     "updateFailed": "更新に失敗しました: {e}",
     "denoDownloadComplete": "Denoのダウンロードが完了しました",
     "checkAppUpdate": "アップデートを確認",

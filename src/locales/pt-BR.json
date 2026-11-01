@@ -139,6 +139,7 @@
     "ytdlpDownloadComplete": "Download do yt-dlp concluído",
     "alreadyLatest": "Você já está na versão mais recente",
     "updatedToLatest": "Atualizado para a versão mais recente",
+    "ytdlpAutoUpdated": "yt-dlp atualizado automaticamente ({version})",
     "updateFailed": "Falha na atualização: {e}",
     "denoDownloadComplete": "Download do Deno concluído",
     "checkAppUpdate": "Verificar atualizações do aplicativo",
