@@ -2,6 +2,7 @@
 import { useI18n } from "vue-i18n";
 import IconMdiCircle from "~icons/mdi/circle";
 import IconMdiFolderOpenOutline from "~icons/mdi/folder-open-outline";
+import IconMdiRefresh from "~icons/mdi/refresh";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useDownloadStore } from "@/stores/download";
 import { useSettingStore } from "@/stores/setting";
@@ -24,6 +25,22 @@ function truncatePath(p: string): string {
   if (!p) return "";
   if (p.length <= 28) return p;
   return "…" + p.slice(-25);
+}
+
+const retrying = ref(new Set<string>());
+
+async function retry(id: string) {
+  if (retrying.value.has(id)) return;
+  retrying.value.add(id);
+  try {
+    await downloadStore.retryTask(id);
+  } catch (e: unknown) {
+    window.$message?.error(
+      (e instanceof Error ? e.message : String(e)) || t("downloads.retryFailed"),
+    );
+  } finally {
+    retrying.value.delete(id);
+  }
 }
 
 async function changeFolder() {
@@ -50,7 +67,21 @@ async function changeFolder() {
             <div class="dl-item-title">{{ task.title }}</div>
             <div v-if="task.uploader" class="dl-item-uploader">{{ task.uploader }}</div>
             <div class="dl-item-label">{{ task.formatLabel }}</div>
+            <div v-if="task.status === 'error'" class="dl-item-error" :title="task.error || ''">
+              {{ t("downloads.status.error") }}
+            </div>
           </div>
+          <button
+            v-if="task.status === 'error'"
+            class="retry-btn"
+            type="button"
+            :title="t('errors.dialogRetry')"
+            :aria-label="t('errors.dialogRetry')"
+            :disabled="retrying.has(task.id)"
+            @click="retry(task.id)"
+          >
+            <n-icon size="14"><IconMdiRefresh /></n-icon>
+          </button>
         </div>
         <n-progress
           v-if="isActive(task.status)"
@@ -160,6 +191,39 @@ async function changeFolder() {
 .dl-item-label {
   font-size: 10px;
   color: var(--mp3-text-muted);
+}
+
+.dl-item-error {
+  font-size: 10px;
+  font-weight: 600;
+  color: #d03050;
+}
+
+.retry-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--mp3-border-strong);
+  border-radius: 5px;
+  background: var(--mp3-surface-3);
+  color: var(--mp3-text-2);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+  &:hover:not(:disabled) {
+    background: var(--mp3-hover);
+    border-color: #d03050;
+    color: #d03050;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
 }
 
 .dl-item-percent {

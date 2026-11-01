@@ -287,7 +287,9 @@ export const useDownloadStore = defineStore("download", () => {
   /** Retry a failed or cancelled task, generating a new ID and resetting state */
   const retryTask = async (id: string) => {
     const task = tasks.value.find((t) => t.id === id);
-    if (!task) return;
+    // Only failed/cancelled tasks can be retried - guards against double
+    // retries (e.g. list button + still-open error dialog).
+    if (!task || (task.status !== "error" && task.status !== "cancelled")) return;
 
     const newId = `dl_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     task.id = newId;
@@ -301,9 +303,16 @@ export const useDownloadStore = defineStore("download", () => {
 
     if (canStartNow()) {
       task.status = "downloading";
-      await invoke("start_download", {
-        params: { id: newId, ...task.params },
-      });
+      try {
+        await invoke("start_download", {
+          params: { id: newId, ...task.params },
+        });
+      } catch (e) {
+        // Don't leave the task stuck in "downloading" if the backend refused to start
+        task.status = "error";
+        task.error = e instanceof Error ? e.message : String(e);
+        throw e;
+      }
     } else {
       task.status = "queued";
     }
